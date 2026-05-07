@@ -48,3 +48,10 @@ C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Verify\V
 C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Verify\VoltOfflineRebuild.dll
 C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Verify\VoltOfflineRebuild.pdb
 C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Release\net8.0-windows\Assets\bouzelouf_logo.png
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\PatchedWhitelist\VoltOfflineRebuild.exe
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\PatchedWhitelist\VoltNative.dll
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\PatchedWhitelist\Assets\bouzelouf_logo.png
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\PatchedWhitelist\VoltOfflineRebuild.deps.json
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\PatchedWhitelist\VoltOfflineRebuild.runtimeconfig.json
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\PatchedWhitelist\VoltOfflineRebuild.dll
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\PatchedWhitelist\VoltOfflineRebuild.pdb

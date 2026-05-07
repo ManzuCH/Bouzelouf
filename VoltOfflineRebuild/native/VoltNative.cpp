@@ -27,6 +27,7 @@ static volatile bool g_rightManualActive = false;
 static volatile int g_currentSlot = 0;
 static bool g_inGame = false;
 static bool g_whitelist[9] = { false };
+static WPARAM g_buttonMask = 0;
 
 static WPARAM MakeMouseCommand(BYTE click, BYTE action) {
     return ((WPARAM)action << 8) | click;
@@ -54,12 +55,19 @@ static void RewriteVoltMouseMessage(MSG* msg) {
     BYTE click = (BYTE)(msg->wParam & 0xff);
     BYTE action = (BYTE)((msg->wParam >> 8) & 0xff);
     bool down = action == 0;
+    WPARAM button = click == 0 ? MK_LBUTTON : MK_RBUTTON;
+
+    if (down) {
+        g_buttonMask |= button;
+    } else {
+        g_buttonMask &= ~button;
+    }
 
     msg->hwnd = target;
     msg->message = click == 0
         ? (down ? WM_LBUTTONDOWN : WM_LBUTTONUP)
         : (down ? WM_RBUTTONDOWN : WM_RBUTTONUP);
-    msg->wParam = down ? (click == 0 ? MK_LBUTTON : MK_RBUTTON) : 0;
+    msg->wParam = g_buttonMask;
     msg->lParam = CursorLParam(target);
 }
 
@@ -159,6 +167,7 @@ __declspec(dllexport) void __cdecl VN_Detach() {
     g_attached = false;
     g_leftManualActive = false;
     g_rightManualActive = false;
+    g_buttonMask = 0;
     timeEndPeriod(1);
 }
 
