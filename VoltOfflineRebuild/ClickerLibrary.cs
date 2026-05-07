@@ -5,6 +5,7 @@ namespace volt_design.Clicker.Library;
 public sealed class ClickerLibrary
 {
     private const string DLL = "VoltNative.dll";
+    private const uint MOUSEEVENTF_MOVE = 0x0001;
 
     // Core
     [DllImport(DLL, EntryPoint = "attach", CallingConvention = CallingConvention.Cdecl)]
@@ -56,6 +57,8 @@ public sealed class ClickerLibrary
     private static extern void VN_SetCurrentSlot(int index);
     [DllImport(DLL, EntryPoint = "setWhitelist", CallingConvention = CallingConvention.Cdecl)]
     private static extern void VN_SetWhitelist(int index, [MarshalAs(UnmanagedType.I1)] bool flag);
+    [DllImport("user32.dll")]
+    private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, nint dwExtraInfo);
 
     // Win32 for window detection
     [DllImport("user32.dll")]
@@ -247,4 +250,9 @@ public sealed class ClickerLibrary
     public void SetWhitelist(int i, bool flag) { if (_nativeLoaded) VN_SetWhitelist(i, flag); }
     public void SendBreakBlockClick(bool f) { if (_nativeLoaded) VN_SendBreakBlockClick(f); }
     public void OneClick(byte c, byte a) { if (_nativeLoaded) VN_OneClick(c, a); }
+    public void SendJitterMove(int dx, int dy)
+    {
+        if (dx == 0 && dy == 0) return;
+        mouse_event(MOUSEEVENTF_MOVE, dx, dy, 0, nint.Zero);
+    }
 }

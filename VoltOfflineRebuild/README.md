@@ -104,9 +104,16 @@ Active la variation du rythme.
 
 ### Jitter
 
-Ajoute une variation supplementaire sur l'intervalle.
+Ajoute un petit mouvement souris pendant l'autoclick, comme le Volt originel qui expose `jitter` + `jitterpower` et importe `mouse_event`.
 
-Actuellement c'est une approximation simple cote rebuild, pas une recreation parfaite du jitter original.
+Comportement actuel :
+
+- `Jitter` active/desactive le mouvement.
+- `Jitter strength` regle la puissance.
+- Le mouvement utilise `mouse_event(MOUSEEVENTF_MOVE)`, pas `SendInput`.
+- Le clic continue d'utiliser la DLL native et les messages Windows comme avant.
+
+Conseil : commence bas, par exemple 5-10%. A 20-25%, le mouvement peut devenir tres visible en jeu.
 
 ### Ignore menus
 
@@ -271,7 +278,7 @@ Checklist :
 Ca peut venir de :
 
 - mode `Butterfly` avec randomisation activee ;
-- `Jitter` ;
+- `Jitter` trop eleve ;
 - `Simulate exhaust` ;
 - Minecraft qui limite ou ignore certains messages ;
 - timing Windows ;
@@ -367,4 +374,3 @@ Les fichiers utiles :
 - `tools\move_next_full_il.txt`
 - `VoltOfflineRebuild\MainForm.cs`
 - `VoltOfflineRebuild\native\VoltNative.cpp`
-

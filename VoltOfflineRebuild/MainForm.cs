@@ -79,6 +79,7 @@ public sealed class MainForm : Form
 
         public bool Randomization = true;
         public bool Jitter;
+        public float JitterPower = 0.1f;
         public bool IgnoreMenus = true;
         public bool ClickSound;
         public bool BreakBlock;
@@ -141,11 +142,6 @@ public sealed class MainForm : Form
                 _ => NextButterflyInterval(cps)
             };
 
-            if (Jitter)
-            {
-                interval *= NextUniform(0.90, 1.12);
-            }
-
             var intervalMs = Math.Clamp((int)Math.Abs(Math.Round(interval)), 1, 500);
             var holdMs = intervalMs > 60 ? Math.Max(1, (int)Math.Floor(intervalMs * 0.3)) : 1;
             var repeatCount = 1;
@@ -169,6 +165,23 @@ public sealed class MainForm : Form
         {
             ContinuousTicks = 0;
             _butterflyStep = 0;
+        }
+
+        public Point NextJitterMove()
+        {
+            var power = Math.Clamp(JitterPower, 0.01f, 1.0f);
+            var horizontalMax = Math.Clamp((int)Math.Ceiling(power * 22.0f), 1, 22);
+            var verticalMax = Math.Clamp((int)Math.Ceiling(power * 10.0f), 1, 10);
+
+            var dx = Random.Shared.Next(-horizontalMax, horizontalMax + 1);
+            var dy = Random.Shared.Next(-verticalMax, verticalMax + 1);
+
+            if (dx == 0 && dy == 0)
+            {
+                dx = Random.Shared.Next(0, 2) == 0 ? -1 : 1;
+            }
+
+            return new Point(dx, dy);
         }
 
         private void ResetModeStateIfNeeded()
@@ -677,6 +690,7 @@ public sealed class MainForm : Form
                 {
                     if (breakBlockHolding)
                     {
+                        ApplyJitter(runtime);
                         _library.OneClick(0, 0);
                         if (!SleepWithGuards(plan.IntervalMs, runtime, left, click))
                         {
@@ -686,10 +700,12 @@ public sealed class MainForm : Form
                         continue;
                     }
 
+                    ApplyJitter(runtime);
                     _library.SendClick(plan.HoldMs);
                 }
                 else
                 {
+                    ApplyJitter(runtime);
                     _library.SendRightClick(plan.HoldMs);
                 }
 
@@ -705,6 +721,22 @@ public sealed class MainForm : Form
         {
             _library.SendBreakBlockClick(false);
         }
+    }
+
+    private void ApplyJitter(RuntimeClickerSettings runtime)
+    {
+        if (!runtime.Jitter)
+        {
+            return;
+        }
+
+        if (_library.TargetWindow == nint.Zero || GetForegroundWindow() != _library.TargetWindow)
+        {
+            return;
+        }
+
+        var move = runtime.NextJitterMove();
+        _library.SendJitterMove(move.X, move.Y);
     }
 
     private static void PerformantSleep(int targetMs)
@@ -950,7 +982,14 @@ public sealed class MainForm : Form
         primary.SetColumnSpan(slider, 2);
 
         primary.Controls.Add(BoundToggle("Randomization", runtime.Randomization, value => runtime.Randomization = value), 0, 4);
-        primary.Controls.Add(BoundToggle("Jitter", runtime.Jitter, value => runtime.Jitter = value), 1, 4);
+        primary.Controls.Add(BoundToggle("Jitter", runtime.Jitter, value =>
+        {
+            runtime.Jitter = value;
+            if (value && runtime.JitterPower <= 0)
+            {
+                runtime.JitterPower = 0.1f;
+            }
+        }), 1, 4);
         primary.Controls.Add(BoundToggle("Ignore menus", runtime.IgnoreMenus, value => runtime.IgnoreMenus = value), 0, 5);
         primary.Controls.Add(BoundToggle("Click sound", runtime.ClickSound, value => runtime.ClickSound = value), 1, 5);
         primary.Controls.Add(BoundToggle(left ? "Break block" : "Ignore left clicker", left ? runtime.BreakBlock : runtime.IgnoreLeftClicker, value =>
@@ -1020,7 +1059,14 @@ public sealed class MainForm : Form
         advanced.Controls.Add(mode, 0, 1);
         advanced.Controls.Add(Combo("Activation", "Hold mouse", "Toggle key"), 0, 2);
         advanced.Controls.Add(MiniSlider("Random spread", (int)(runtime.RandomizationCps * 10), 0, 50, value => runtime.RandomizationCps = value / 10f, value => $"{value / 10f:0.0} cps"), 0, 3);
-        advanced.Controls.Add(MiniSlider("Jitter", runtime.Jitter ? 12 : 0, 0, 25, value => runtime.Jitter = value > 0, value => $"{value}%"), 0, 4);
+        advanced.Controls.Add(MiniSlider("Jitter strength", runtime.Jitter ? (int)Math.Round(runtime.JitterPower * 100f) : 0, 0, 25, value =>
+        {
+            runtime.Jitter = value > 0;
+            if (value > 0)
+            {
+                runtime.JitterPower = value / 100f;
+            }
+        }, value => $"{value}%"), 0, 4);
 
         if (left)
         {

@@ -8,7 +8,7 @@
     "net8.0-windows7.0": []
   },
   "packageFolders": {
-    "C:\\Users\\Manzu\\Desktop\\volt_chatgpt\\.dotnet_home\\.nuget\\packages\\": {}
+    "C:\\Users\\Manzu\\Desktop\\volt_chatgpt\\volt_chatgpt\\.dotnet_home\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
@@ -16,7 +16,7 @@
       "projectUniqueName": "C:\\Users\\Manzu\\Desktop\\volt_chatgpt\\volt_chatgpt\\VoltOfflineRebuild\\VoltOfflineRebuild.csproj",
       "projectName": "VoltOfflineRebuild",
       "projectPath": "C:\\Users\\Manzu\\Desktop\\volt_chatgpt\\volt_chatgpt\\VoltOfflineRebuild\\VoltOfflineRebuild.csproj",
-      "packagesPath": "C:\\Users\\Manzu\\Desktop\\volt_chatgpt\\.dotnet_home\\.nuget\\packages\\",
+      "packagesPath": "C:\\Users\\Manzu\\Desktop\\volt_chatgpt\\volt_chatgpt\\.dotnet_home\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\Manzu\\Desktop\\volt_chatgpt\\volt_chatgpt\\VoltOfflineRebuild\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
