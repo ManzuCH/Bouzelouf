@@ -1,0 +1,15 @@
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Debug\net8.0-windows\VoltOfflineRebuild.exe
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Debug\net8.0-windows\VoltNative.dll
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Debug\net8.0-windows\VoltOfflineRebuild.deps.json
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Debug\net8.0-windows\VoltOfflineRebuild.runtimeconfig.json
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Debug\net8.0-windows\VoltOfflineRebuild.dll
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\bin\Debug\net8.0-windows\VoltOfflineRebuild.pdb
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\VoltOfflineRebuild.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\VoltOfflineRebuild.AssemblyInfoInputs.cache
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\VoltOfflineRebuild.AssemblyInfo.cs
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\VoltOfflineRebuild.csproj.CoreCompileInputs.cache
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\VoltOfflineRebuild.dll
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\refint\VoltOfflineRebuild.dll
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\VoltOfflineRebuild.pdb
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\VoltOfflineRebuild.genruntimeconfig.cache
+C:\Users\Manzu\Desktop\volt_chatgpt\volt_chatgpt\VoltOfflineRebuild\obj\Debug\net8.0-windows\ref\VoltOfflineRebuild.dll

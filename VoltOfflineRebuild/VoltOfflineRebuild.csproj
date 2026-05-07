@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="native\VoltNative.dll" CopyToOutputDirectory="Always" TargetPath="VoltNative.dll" />
+    <None Include="Assets\bouzelouf_logo.png" CopyToOutputDirectory="Always" TargetPath="Assets\bouzelouf_logo.png" />
+  </ItemGroup>
+
+</Project>
