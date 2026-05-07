@@ -38,9 +38,9 @@ public static class Config
         defaultLMax = 12f;
         defaultRMin = 13f;
         defaultRMax = 16f;
-        defaultKeybind = System.Windows.Forms.Keys.F4;
+        defaultKeybind = System.Windows.Forms.Keys.None;
         defaultRKeybind = System.Windows.Forms.Keys.None;
-        defaultHideKeybind = System.Windows.Forms.Keys.F7;
+        defaultHideKeybind = System.Windows.Forms.Keys.None;
         defaultDestructKeybind = System.Windows.Forms.Keys.None;
         version = new EncryptedString("local-dev");
         updateDate = new EncryptedString(DateTime.UtcNow.ToString("yyyy-MM-dd"));

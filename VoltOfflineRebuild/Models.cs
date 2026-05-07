@@ -22,11 +22,12 @@ public sealed class UserConfig
         public System.Windows.Forms.Keys destruct_key = volt_design.Config.defaultDestructKeybind;
         public System.Windows.Forms.Keys lautoclicker_key = volt_design.Config.defaultKeybind;
         public System.Windows.Forms.Keys rautoclicker_key = volt_design.Config.defaultRKeybind;
-        public System.Windows.Forms.Keys tntmacros_key;
+        public System.Windows.Forms.Keys tntmacros_key = System.Windows.Forms.Keys.None;
         public int tntmacros_mode;
-        public System.Windows.Forms.Keys tntmacros_manualkey;
+        public System.Windows.Forms.Keys tntmacros_manualkey = System.Windows.Forms.Keys.None;
         public int tntmacros_tntslot;
         public int tntmacros_flintslot = 1;
+        public int tntmacros_switchdelay = 45;
         public bool tntmacros_backslot;
         public bool[] lautoclicker_slots = new bool[9];
         public bool[] rautoclicker_slots = new bool[9];

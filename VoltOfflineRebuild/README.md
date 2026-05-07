@@ -65,8 +65,8 @@ dotnet build .\VoltOfflineRebuild.csproj -c Release
 
 Raccourcis :
 
-- `F4` active/desactive le left clicker.
-- `F7` active/desactive le right clicker.
+- Aucun raccourci n'est defini par defaut.
+- Clique sur `Activation key` dans `Left clicker` ou `Right clicker`, puis appuie sur la touche voulue.
 
 ## Onglet Left / Right
 
@@ -169,6 +169,42 @@ Utilisation :
 5. Change de slot : l'autoclick doit s'arreter si le nouveau slot n'est pas autorise.
 
 Important : Left et Right ont maintenant chacun leur propre whitelist cote C#.
+
+## Onglet Macros
+
+### TNT macro
+
+La TNT macro est reconstruite d'apres la page `Misc` du Volt originel.
+
+Elements retrouves dans l'originel :
+
+- `TNT macro` active/desactive.
+- `TNT slot`.
+- `Flint slot`.
+- `Switch delay` pour regler le temps entre la pose TNT et le passage au briquet.
+- `Back to last slot`.
+- `Activation` avec modes `Slot keypress`, `Manual keypress`, `Right click`.
+- `Toggle key` et `Manual key`.
+
+Comportement actuel du rebuild :
+
+1. La touche `Toggle key` active/desactive la macro. Aucune touche n'est definie par defaut.
+2. `Slot keypress` declenche la macro quand tu appuies sur la touche du slot TNT.
+3. `Manual keypress` declenche la macro avec la touche `Manual key`.
+4. `Right click` declenche la macro au clic droit.
+5. La sequence envoie : slot TNT -> clic droit -> slot flint -> clic droit.
+6. `Switch delay` regle l'attente entre le clic TNT et le changement vers le briquet.
+7. Si `Back to last slot` est coche, l'application revient au slot d'origine.
+
+Important : les changements de slot utilisent `keybd_event`, comme l'originel expose cote WinApi. Les clics droits de la sequence passent par `oneClick` dans `VoltNative.dll`, donc ils ne dependent pas du right autoclicker.
+
+Conseils :
+
+- Mets la TNT sur le slot `TNT slot`.
+- Mets le briquet/flint sur le slot `Flint slot`.
+- Commence avec `Switch delay` autour de 45-80 ms, puis ajuste selon la latence du jeu.
+- Teste d'abord en mode `Manual keypress` avec une touche simple.
+- Si le mode `Right click` double-place ou se declenche trop tot, utilise plutot `Manual keypress`.
 
 ## Probleme connu : slot whitelist encore imparfait
 
@@ -321,7 +357,7 @@ Ce n'est pas exactement le systeme original de Volt. Selon la version de Minecra
 - L'UI est une refonte Bouzelouf, pas l'UI Volt exacte.
 - La detection menu/inventory est approximative.
 - Le son de clic est expose dans l'UI mais pas completement implemente comme Volt.
-- Les options Misc comme TNT macro sont surtout des placeholders UI pour l'instant.
+- La TNT macro est reconstruite, mais pas byte-for-byte identique a Volt.
 - Slot whitelist n'est pas encore aussi fiable que l'original.
 
 ### Pourquoi ne pas utiliser directement la DLL originale
@@ -355,7 +391,8 @@ Inconvenients :
 | Ignore menus | Partiel |
 | Slots whitelist | Partiel / bug restant possible |
 | Click sound | UI presente, logique incomplete |
-| Misc macros | UI presente, logique incomplete |
+| TNT macro | Fonctionnel, reconstruit |
+| Autres Misc macros | UI presente, logique incomplete |
 | Login/auth Volt | Non repris |
 
 ## Conseils pour continuer le reverse

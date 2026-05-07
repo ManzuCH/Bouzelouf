@@ -17,6 +17,15 @@ public sealed class MainForm : Form
         Log
     }
 
+    private enum PendingKeybind
+    {
+        None,
+        LeftToggle,
+        RightToggle,
+        TntToggle,
+        TntManual
+    }
+
     private static readonly Color AppBg = Color.FromArgb(14, 15, 18);
     private static readonly Color NavBg = Color.FromArgb(8, 10, 13);
     private static readonly Color Surface = Color.FromArgb(24, 26, 31);
@@ -44,8 +53,25 @@ public sealed class MainForm : Form
     private Page _activePage = Page.Left;
     private volatile bool _leftEnabled;
     private volatile bool _rightEnabled;
+    private volatile bool _tntMacroEnabled;
+    private volatile bool _tntMacroRunning;
     private bool _lastLeftBindDown;
     private bool _lastRightBindDown;
+    private bool _lastTntToggleDown;
+    private bool _lastTntManualDown;
+    private bool _lastTntSlotDown;
+    private bool _lastTntRightDown;
+    private PendingKeybind _pendingKeybind = PendingKeybind.None;
+    private Button? _pendingKeybindButton;
+    private string _pendingKeybindLabel = "";
+    private Label? _clickerHeaderState;
+    private Label? _clickerHeaderHint;
+    private CheckBox? _clickerEnabledToggle;
+    private CheckBox? _tntMacroToggle;
+    private Label? _tntRuntimeState;
+    private Label? _targetHandleState;
+    private bool _updatingClickerToggle;
+    private bool _updatingTntToggle;
     private volatile int _leftCps = 11;
     private volatile int _rightCps = 14;
     private readonly RuntimeClickerSettings _leftRuntime = RuntimeClickerSettings.LeftDefaults();
@@ -60,6 +86,10 @@ public sealed class MainForm : Form
     private static extern nint GetForegroundWindow();
     [DllImport("user32.dll")]
     private static extern bool GetCursorInfo(ref CursorInfo cursorInfo);
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);
+    [DllImport("user32.dll")]
+    private static extern uint MapVirtualKeyA(uint uCode, uint uMapType);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct CursorInfo
@@ -509,7 +539,7 @@ public sealed class MainForm : Form
         _status.TextAlign = ContentAlignment.MiddleLeft;
 
         bar.Controls.Add(_status, 0, 0);
-        bar.Controls.Add(StatusText("F4 Left / F7 Right"), 1, 0);
+        bar.Controls.Add(StatusText("Keys configurable"), 1, 0);
         bar.Controls.Add(StatusText("Bouzelouf local"), 2, 0);
         return bar;
     }
@@ -555,8 +585,14 @@ public sealed class MainForm : Form
         var keybindTimer = new System.Windows.Forms.Timer { Interval = 15 };
         keybindTimer.Tick += (_, _) =>
         {
-            PollToggleKey(0x73, ref _lastLeftBindDown, () => SetClickerEnabled(left: true, !_leftEnabled, refresh: true));
-            PollToggleKey(0x76, ref _lastRightBindDown, () => SetClickerEnabled(left: false, !_rightEnabled, refresh: true));
+            if (CapturePendingKeybind())
+            {
+                return;
+            }
+
+            PollToggleKey((int)_config.settings.lautoclicker_key, ref _lastLeftBindDown, () => SetClickerEnabled(left: true, !_leftEnabled, refresh: true));
+            PollToggleKey((int)_config.settings.rautoclicker_key, ref _lastRightBindDown, () => SetClickerEnabled(left: false, !_rightEnabled, refresh: true));
+            PollTntMacroKeys();
             PollCurrentSlot();
         };
         keybindTimer.Start();
@@ -595,6 +631,199 @@ public sealed class MainForm : Form
         }
 
         return false;
+    }
+
+    private bool CapturePendingKeybind()
+    {
+        if (_pendingKeybind == PendingKeybind.None)
+        {
+            return false;
+        }
+
+        for (var vk = 8; vk <= 254; vk++)
+        {
+            if (vk is 16 or 17 or 18)
+            {
+                continue;
+            }
+
+            if ((GetAsyncKeyState(vk) & 0x8000) == 0)
+            {
+                continue;
+            }
+
+            var key = (Keys)vk;
+            var binding = _pendingKeybind;
+            if (binding == PendingKeybind.LeftToggle)
+            {
+                _config.settings.lautoclicker_key = key;
+                _lastLeftBindDown = true;
+            }
+            else if (binding == PendingKeybind.RightToggle)
+            {
+                _config.settings.rautoclicker_key = key;
+                _lastRightBindDown = true;
+            }
+            else if (binding == PendingKeybind.TntToggle)
+            {
+                _config.settings.tntmacros_key = key;
+                _lastTntToggleDown = true;
+            }
+            else
+            {
+                _config.settings.tntmacros_manualkey = key;
+                _lastTntManualDown = true;
+            }
+
+            _pendingKeybind = PendingKeybind.None;
+            var label = PendingKeybindStatusLabel(binding);
+            if (_pendingKeybindButton is not null)
+            {
+                ApplyKeyBindButtonStyle(_pendingKeybindButton, _pendingKeybindLabel, key, capture: false);
+            }
+            _pendingKeybindButton = null;
+            _pendingKeybindLabel = "";
+            SetStatus($"{label} set to {KeyName(key)}", good: true);
+            UpdateVisibleKeybindText(binding, key);
+            return true;
+        }
+
+        return true;
+    }
+
+    private static string PendingKeybindStatusLabel(PendingKeybind binding) => binding switch
+    {
+        PendingKeybind.LeftToggle => "Left activation key",
+        PendingKeybind.RightToggle => "Right activation key",
+        PendingKeybind.TntToggle => "TNT toggle key",
+        PendingKeybind.TntManual => "TNT manual key",
+        _ => "Keybind"
+    };
+
+    private void UpdateVisibleKeybindText(PendingKeybind binding, Keys key)
+    {
+        if ((binding == PendingKeybind.LeftToggle && _activePage == Page.Left) ||
+            (binding == PendingKeybind.RightToggle && _activePage == Page.Right))
+        {
+            if (_clickerHeaderHint is not null)
+            {
+                _clickerHeaderHint.Text = $"{KeyHint(key)}  /  hold {(_activePage == Page.Left ? "left" : "right")} mouse";
+            }
+        }
+    }
+
+    private void PollTntMacroKeys()
+    {
+        var settings = _config.settings;
+        PollToggleKey((int)settings.tntmacros_key, ref _lastTntToggleDown, () => SetTntMacroEnabled(!_tntMacroEnabled));
+
+        if (!_tntMacroEnabled || _tntMacroRunning || _library.TargetWindow == nint.Zero || GetForegroundWindow() != _library.TargetWindow)
+        {
+            return;
+        }
+
+        switch (settings.tntmacros_mode)
+        {
+            case 0:
+                PollToggleKey(0x31 + settings.tntmacros_tntslot, ref _lastTntSlotDown, () => RunTntMacro(needToSwitch: false));
+                break;
+            case 1:
+                if (settings.tntmacros_manualkey != Keys.None)
+                {
+                    PollToggleKey((int)settings.tntmacros_manualkey, ref _lastTntManualDown, () => RunTntMacro(needToSwitch: true));
+                }
+                break;
+            case 2:
+                PollToggleKey(0x02, ref _lastTntRightDown, () =>
+                {
+                    RefreshCurrentSlotFromKeyboard();
+                    RunTntMacro(needToSwitch: _library.GetCurrentSlot() != settings.tntmacros_tntslot);
+                });
+                break;
+        }
+    }
+
+    private void RunTntMacro(bool needToSwitch)
+    {
+        if (_tntMacroRunning)
+        {
+            return;
+        }
+
+        var settings = _config.settings;
+        var tntSlot = Math.Clamp(settings.tntmacros_tntslot, 0, 8);
+        var flintSlot = Math.Clamp(settings.tntmacros_flintslot, 0, 8);
+        var backSlot = Math.Clamp(_library.GetCurrentSlot(), 0, 8);
+        var switchDelay = Math.Clamp(settings.tntmacros_switchdelay, 20, 300);
+        var shouldBackSlot = settings.tntmacros_backslot;
+
+        _tntMacroRunning = true;
+        BeginInvoke(UpdateTntMacroVisuals);
+        var worker = new Thread(() =>
+        {
+            try
+            {
+                if (_library.TargetWindow == nint.Zero || GetForegroundWindow() != _library.TargetWindow)
+                {
+                    return;
+                }
+
+                if (needToSwitch || _library.GetCurrentSlot() != tntSlot)
+                {
+                    PressSlotKey(tntSlot);
+                    PerformantSleep(30);
+                }
+
+                RightClickOnce();
+                PerformantSleep(switchDelay);
+
+                if (flintSlot != tntSlot)
+                {
+                    PressSlotKey(flintSlot);
+                    PerformantSleep(30);
+                }
+
+                RightClickOnce();
+                PerformantSleep(25);
+
+                if (shouldBackSlot && backSlot != flintSlot)
+                {
+                    PressSlotKey(backSlot);
+                }
+
+                PostStatus("TNT macro executed", good: true);
+            }
+            finally
+            {
+                _tntMacroRunning = false;
+                if (!IsDisposed)
+                {
+                    BeginInvoke(UpdateTntMacroVisuals);
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "Volt TNT macro worker"
+        };
+        worker.Start();
+    }
+
+    private void RightClickOnce()
+    {
+        _library.OneClick(1, 0);
+        PerformantSleep(20);
+        _library.OneClick(1, 1);
+    }
+
+    private void PressSlotKey(int slot)
+    {
+        var vk = (byte)(0x31 + Math.Clamp(slot, 0, 8));
+        var scan = (byte)MapVirtualKeyA(vk, 0);
+        keybd_event(vk, scan, 0, 0);
+        PerformantSleep(18);
+        keybd_event(vk, scan, 0x0002, 0);
+        _library.SetCurrentSlot(slot);
     }
 
     private void StartClickWorkers()
@@ -853,6 +1082,12 @@ public sealed class MainForm : Form
 
     private static void PollToggleKey(int vKey, ref bool previousDown, Action onPressed)
     {
+        if (vKey <= 0)
+        {
+            previousDown = false;
+            return;
+        }
+
         var down = (GetAsyncKeyState(vKey) & 0x8000) != 0;
         if (down && !previousDown)
         {
@@ -866,6 +1101,7 @@ public sealed class MainForm : Form
         var runtime = left ? _leftRuntime : _rightRuntime;
         var enabled = left ? _leftEnabled : _rightEnabled;
         var cps = left ? _leftCps : _rightCps;
+        var toggleKey = left ? _config.settings.lautoclicker_key : _config.settings.rautoclicker_key;
 
         var page = PaddedPage();
         var layout = new TableLayoutPanel
@@ -918,14 +1154,19 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI Semibold", 20f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
         }, 1, 0);
-        header.Controls.Add(Pill(enabled ? "ENABLED" : "DISABLED", enabled), 2, 0);
-        header.Controls.Add(new Label
+        var statePill = Pill(enabled ? "ENABLED" : "DISABLED", enabled);
+        _clickerHeaderState = statePill;
+        header.Controls.Add(statePill, 2, 0);
+
+        var hint = new Label
         {
-            Text = left ? "F4 toggle  /  hold left mouse" : "F7 toggle  /  hold right mouse",
+            Text = $"{KeyHint(toggleKey)}  /  hold {(left ? "left" : "right")} mouse",
             Dock = DockStyle.Fill,
             ForeColor = TextMuted,
             TextAlign = ContentAlignment.MiddleLeft
-        }, 1, 1);
+        };
+        _clickerHeaderHint = hint;
+        header.Controls.Add(hint, 1, 1);
         header.Controls.Add(ValueLabel($"{cps} CPS"), 2, 1);
         layout.Controls.Add(header, 0, 0);
         layout.SetColumnSpan(header, 2);
@@ -946,7 +1187,8 @@ public sealed class MainForm : Form
         primary.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         primary.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         primary.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        for (var i = 0; i < 6; i++) primary.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        for (var i = 0; i < 5; i++) primary.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        primary.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
         primary.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.Controls.Add(primary, 0, 1);
 
@@ -954,9 +1196,18 @@ public sealed class MainForm : Form
         primary.SetColumnSpan(primary.GetControlFromPosition(0, 0)!, 2);
 
         var enable = ToggleBox("Enabled", enabled);
-        enable.CheckedChanged += (_, _) => SetClickerEnabled(left, enable.Checked, refresh: true);
+        enable.CheckedChanged += (_, _) =>
+        {
+            if (_updatingClickerToggle)
+            {
+                return;
+            }
+
+            SetClickerEnabled(left, enable.Checked, refresh: true);
+        };
+        _clickerEnabledToggle = enable;
         primary.Controls.Add(enable, 0, 1);
-        primary.Controls.Add(Pill(left ? "F4" : "F7", enabled), 1, 1);
+        primary.Controls.Add(KeyBindButton("Activation key", toggleKey, left ? PendingKeybind.LeftToggle : PendingKeybind.RightToggle), 1, 1);
 
         var cpsLabel = FieldLabel("Clicks per second");
         var value = ValueLabel($"{cps} CPS");
@@ -1011,23 +1262,11 @@ public sealed class MainForm : Form
             else runtime.AllowInMenusOnShift = value;
         }), 1, 8);
 
-        var slots = new FlowLayoutPanel
+        var slots = SlotWhitelistPanel(runtime.Slots, slotIndex =>
         {
-            Dock = DockStyle.Fill,
-            BackColor = Surface,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Margin = new Padding(0, 12, 0, 0)
-        };
-        for (var i = 1; i <= 9; i++)
-        {
-            var slotIndex = i - 1;
-            slots.Controls.Add(SlotButton(i, runtime.Slots[slotIndex], selected =>
-            {
-                runtime.Slots[slotIndex] = selected;
-                SyncWhitelist(left);
-            }));
-        }
+            runtime.Slots[slotIndex] = !runtime.Slots[slotIndex];
+            SyncWhitelist(left);
+        });
         primary.Controls.Add(slots, 0, 9);
         primary.SetColumnSpan(slots, 2);
 
@@ -1053,11 +1292,8 @@ public sealed class MainForm : Form
         layout.Controls.Add(advanced, 1, 1);
 
         advanced.Controls.Add(SectionTitle("Profile options"), 0, 0);
-        var mode = Combo("Mode", "Normal", "Butterfly", "Blatant");
-        mode.SelectedIndex = Math.Clamp(runtime.RandomMode, 0, mode.Items.Count - 1);
-        mode.SelectedIndexChanged += (_, _) => runtime.RandomMode = mode.SelectedIndex;
-        advanced.Controls.Add(mode, 0, 1);
-        advanced.Controls.Add(Combo("Activation", "Hold mouse", "Toggle key"), 0, 2);
+        advanced.Controls.Add(SelectMenu("Mode", new[] { "Normal", "Butterfly", "Blatant" }, runtime.RandomMode, value => runtime.RandomMode = value), 0, 1);
+        advanced.Controls.Add(SelectMenu("Activation", new[] { "Hold mouse", "Toggle key" }, 0, _ => { }), 0, 2);
         advanced.Controls.Add(MiniSlider("Random spread", (int)(runtime.RandomizationCps * 10), 0, 50, value => runtime.RandomizationCps = value / 10f, value => $"{value / 10f:0.0} cps"), 0, 3);
         advanced.Controls.Add(MiniSlider("Jitter strength", runtime.Jitter ? (int)Math.Round(runtime.JitterPower * 100f) : 0, 0, 25, value =>
         {
@@ -1100,11 +1336,57 @@ public sealed class MainForm : Form
 
         var macroCard = CardPanel();
         macroCard.Margin = new Padding(0, 14, 14, 0);
-        var macro = TwoColumnCard("TNT macro");
-        macro.Controls.Add(ToggleBox("TNT macro", false), 0, 1);
-        macro.Controls.Add(ToggleBox("Back to last slot", false), 1, 1);
-        macro.Controls.Add(Combo("TNT slot", "3", "4", "5", "6"), 0, 2);
-        macro.Controls.Add(Combo("Flint slot", "2", "1", "8", "9"), 1, 2);
+        var settings = _config.settings;
+        var macro = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            Padding = new Padding(18),
+            ColumnCount = 2,
+            RowCount = 8
+        };
+        macro.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        macro.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        macro.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        macro.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        macro.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        macro.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        macro.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        macro.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+        macro.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+        macro.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        macro.Controls.Add(SectionTitle("TNT macro"), 0, 0);
+        macro.SetColumnSpan(macro.GetControlFromPosition(0, 0)!, 2);
+
+        var enabled = ToggleBox("TNT macro", _tntMacroEnabled);
+        enabled.CheckedChanged += (_, _) =>
+        {
+            if (_updatingTntToggle)
+            {
+                return;
+            }
+
+            SetTntMacroEnabled(enabled.Checked);
+        };
+        _tntMacroToggle = enabled;
+        macro.Controls.Add(enabled, 0, 1);
+
+        var backSlot = ToggleBox("Back to last slot", settings.tntmacros_backslot);
+        backSlot.CheckedChanged += (_, _) => settings.tntmacros_backslot = backSlot.Checked;
+        macro.Controls.Add(backSlot, 1, 1);
+
+        macro.Controls.Add(SelectMenu("Activation", new[] { "Slot keypress", "Manual keypress", "Right click" }, settings.tntmacros_mode, value => settings.tntmacros_mode = value), 0, 2);
+        macro.SetColumnSpan(macro.GetControlFromPosition(0, 2)!, 2);
+
+        macro.Controls.Add(KeyBindButton("Toggle key", settings.tntmacros_key, PendingKeybind.TntToggle), 0, 3);
+        macro.Controls.Add(KeyBindButton("Manual key", settings.tntmacros_manualkey, PendingKeybind.TntManual), 1, 3);
+        macro.Controls.Add(MiniSlider("Switch delay", Math.Clamp(settings.tntmacros_switchdelay, 20, 300), 20, 300, value => settings.tntmacros_switchdelay = value, value => $"{value} ms"), 0, 4);
+        macro.SetColumnSpan(macro.GetControlFromPosition(0, 4)!, 2);
+
+        macro.Controls.Add(SlotPickerPanel("TNT slot", "Slot utilise pour poser la TNT", settings.tntmacros_tntslot, slot => settings.tntmacros_tntslot = slot), 0, 5);
+        macro.SetColumnSpan(macro.GetControlFromPosition(0, 5)!, 2);
+        macro.Controls.Add(SlotPickerPanel("Flint slot", "Slot du briquet / flint", settings.tntmacros_flintslot, slot => settings.tntmacros_flintslot = slot), 0, 6);
+        macro.SetColumnSpan(macro.GetControlFromPosition(0, 6)!, 2);
         macroCard.Controls.Add(macro);
         grid.Controls.Add(macroCard, 0, 1);
 
@@ -1114,6 +1396,7 @@ public sealed class MainForm : Form
         state.Controls.Add(ReadOnlyField("Left CPS", $"{_leftCps}"), 0, 1);
         state.Controls.Add(ReadOnlyField("Right CPS", $"{_rightCps}"), 0, 2);
         state.Controls.Add(ReadOnlyField("Current slot", $"{_library.GetCurrentSlot() + 1}"), 0, 3);
+        state.Controls.Add(ReadOnlyField("TNT macro", _tntMacroRunning ? "Running" : (_tntMacroEnabled ? "Enabled" : "Disabled"), out _tntRuntimeState), 0, 4);
         stateCard.Controls.Add(state);
         grid.Controls.Add(stateCard, 1, 1);
         return page;
@@ -1141,7 +1424,7 @@ public sealed class MainForm : Form
         var gameCard = CardPanel();
         gameCard.Margin = new Padding(0, 14, 14, 0);
         var game = OneColumnCard("Game connection");
-        game.Controls.Add(ReadOnlyField("Target handle", _library.TargetWindow == nint.Zero ? "Not connected" : $"0x{_library.TargetWindow:X}"), 0, 1);
+        game.Controls.Add(ReadOnlyField("Target handle", _library.TargetWindow == nint.Zero ? "Not connected" : $"0x{_library.TargetWindow:X}", out _targetHandleState), 0, 1);
 
         var connect = PrimaryButton(_library.TargetWindow == nint.Zero ? "Connect to Minecraft" : "Refresh target");
         connect.Click += (_, _) =>
@@ -1156,10 +1439,13 @@ public sealed class MainForm : Form
 
             _library.SetTargetWindow(hwnd);
             SetStatus($"Connected to game window 0x{hwnd:X}", good: true);
-            SelectPage(Page.Settings);
+            if (_targetHandleState is not null)
+            {
+                _targetHandleState.Text = $"0x{hwnd:X}";
+            }
         };
         game.Controls.Add(connect, 0, 2);
-        game.Controls.Add(Combo("Detection", "Minecraft / LWJGL", "AZ fallback"), 0, 3);
+        game.Controls.Add(SelectMenu("Detection", new[] { "Minecraft / LWJGL", "AZ fallback" }, _config.settings.mcdetection_mode, value => _config.settings.mcdetection_mode = value), 0, 3);
         gameCard.Controls.Add(game);
         grid.Controls.Add(gameCard, 0, 1);
 
@@ -1237,10 +1523,37 @@ public sealed class MainForm : Form
 
         SetStatus($"{(left ? "Left" : "Right")} clicker {(enabled ? "enabled" : "disabled")}", enabled);
         UpdateTopBar();
-        var page = left ? Page.Left : Page.Right;
-        if (refresh && _activePage == page)
+        if (_clickerHeaderState is not null && _activePage == (left ? Page.Left : Page.Right))
         {
-            SelectPage(page);
+            StylePill(_clickerHeaderState, enabled ? "ENABLED" : "DISABLED", enabled);
+            if (_clickerEnabledToggle is not null && _clickerEnabledToggle.Checked != enabled)
+            {
+                _updatingClickerToggle = true;
+                _clickerEnabledToggle.Checked = enabled;
+                _updatingClickerToggle = false;
+            }
+        }
+    }
+
+    private void SetTntMacroEnabled(bool enabled)
+    {
+        _tntMacroEnabled = enabled;
+        SetStatus($"TNT macro {(enabled ? "enabled" : "disabled")}", enabled);
+        UpdateTntMacroVisuals();
+    }
+
+    private void UpdateTntMacroVisuals()
+    {
+        if (_tntMacroToggle is not null && _tntMacroToggle.Checked != _tntMacroEnabled)
+        {
+            _updatingTntToggle = true;
+            _tntMacroToggle.Checked = _tntMacroEnabled;
+            _updatingTntToggle = false;
+        }
+
+        if (_tntRuntimeState is not null)
+        {
+            _tntRuntimeState.Text = _tntMacroRunning ? "Running" : (_tntMacroEnabled ? "Enabled" : "Disabled");
         }
     }
 
@@ -1271,6 +1584,22 @@ public sealed class MainForm : Form
     {
         _status.Text = text;
         _status.ForeColor = good ? Good : TextMuted;
+    }
+
+    private void PostStatus(string text, bool good)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => SetStatus(text, good));
+            return;
+        }
+
+        SetStatus(text, good);
     }
 
     private static Panel PaddedPage()
@@ -1527,24 +1856,105 @@ public sealed class MainForm : Form
         return row;
     }
 
-    private static ComboBox Combo(string label, params string[] values)
+    private static Control SelectMenu(string label, string[] values, int selectedIndex, Action<int> onChanged)
     {
-        var combo = new ComboBox
+        var current = Math.Clamp(selectedIndex, 0, values.Length - 1);
+        var button = new Button
         {
             Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor = SurfaceAlt,
             ForeColor = TextMain,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
-            Margin = new Padding(0, 5, 0, 5)
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 5, 0, 5),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(12, 0, 10, 0)
         };
-        combo.Items.AddRange(values.Select(v => $"{label}: {v}").Cast<object>().ToArray());
-        combo.SelectedIndex = 0;
-        return combo;
+        button.FlatAppearance.BorderColor = BorderSoft;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.MouseOverBackColor = SurfaceSoft;
+
+        void PaintValue()
+        {
+            button.Text = $"{label}: {values[current]}    v";
+        }
+
+        button.Click += (_, _) =>
+        {
+            ShowSelectPopup(button, values, current, value =>
+            {
+                current = value;
+                PaintValue();
+                onChanged(value);
+            });
+        };
+
+        PaintValue();
+        return button;
+    }
+
+    private static void ShowSelectPopup(Control anchor, string[] values, int current, Action<int> onChanged)
+    {
+        var itemHeight = 34;
+        var popup = new Form
+        {
+            FormBorderStyle = FormBorderStyle.None,
+            StartPosition = FormStartPosition.Manual,
+            ShowInTaskbar = false,
+            BackColor = Border,
+            Size = new Size(Math.Max(anchor.Width, 220), values.Length * itemHeight + 2)
+        };
+
+        var list = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            Padding = new Padding(1),
+            ColumnCount = 1,
+            RowCount = values.Length
+        };
+        popup.Controls.Add(list);
+
+        for (var i = 0; i < values.Length; i++)
+        {
+            var index = i;
+            list.RowStyles.Add(new RowStyle(SizeType.Absolute, itemHeight));
+            var option = new Button
+            {
+                Text = values[i],
+                Dock = DockStyle.Fill,
+                BackColor = i == current ? AccentSoft : Surface,
+                ForeColor = i == current ? Accent : TextMain,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(12, 0, 0, 0),
+                Cursor = Cursors.Hand,
+                Margin = new Padding(0)
+            };
+            option.FlatAppearance.BorderSize = 0;
+            option.FlatAppearance.MouseOverBackColor = SurfaceAlt;
+            option.Click += (_, _) =>
+            {
+                onChanged(index);
+                popup.Close();
+            };
+            list.Controls.Add(option, 0, i);
+        }
+
+        popup.Deactivate += (_, _) => popup.Close();
+        var screenPoint = anchor.PointToScreen(new Point(0, anchor.Height + 2));
+        popup.Location = screenPoint;
+        popup.Show(anchor.FindForm());
     }
 
     private static Control ReadOnlyField(string label, string value)
+    {
+        return ReadOnlyField(label, value, out _);
+    }
+
+    private static Control ReadOnlyField(string label, string value, out Label valueLabel)
     {
         var field = new TableLayoutPanel
         {
@@ -1556,15 +1966,285 @@ public sealed class MainForm : Form
         field.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
         field.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         field.Controls.Add(FieldLabel(label), 0, 0);
-        field.Controls.Add(new Label
+        valueLabel = new Label
         {
             Text = value,
             Dock = DockStyle.Fill,
             ForeColor = TextMain,
             TextAlign = ContentAlignment.MiddleLeft
-        }, 1, 0);
+        };
+        field.Controls.Add(valueLabel, 1, 0);
         return field;
     }
+
+    private Button KeyBindButton(string label, Keys key, PendingKeybind binding)
+    {
+        var button = new Button
+        {
+            Dock = DockStyle.Fill,
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 5, 0, 5)
+        };
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.MouseOverBackColor = SurfaceAlt;
+        ApplyKeyBindButtonStyle(button, label, key, capture: false);
+        button.Click += (_, _) =>
+        {
+            _pendingKeybind = binding;
+            _pendingKeybindButton = button;
+            _pendingKeybindLabel = label;
+            ApplyKeyBindButtonStyle(button, label, key, capture: true);
+            SetStatus($"Press a key for {PendingKeybindStatusLabel(binding).ToLowerInvariant()}", good: true);
+        };
+        return button;
+    }
+
+    private static void ApplyKeyBindButtonStyle(Button button, string label, Keys key, bool capture)
+    {
+        if (capture)
+        {
+            button.Text = $"{label}: press a key...";
+            button.BackColor = Accent;
+            button.ForeColor = Color.Black;
+            button.FlatAppearance.BorderColor = Accent;
+            return;
+        }
+
+        button.Text = key == Keys.None ? $"{label}: click to bind" : $"{label}: {KeyName(key)}";
+        button.BackColor = key == Keys.None ? SurfaceAlt : AccentSoft;
+        button.ForeColor = key == Keys.None ? TextMuted : Accent;
+        button.FlatAppearance.BorderColor = key == Keys.None ? BorderSoft : Accent;
+    }
+
+    private static Control SlotPickerPanel(string title, string subtitle, int selectedSlot, Action<int> onChanged)
+    {
+        var activeColor = title.StartsWith("Flint", StringComparison.OrdinalIgnoreCase)
+            ? Color.FromArgb(93, 218, 184)
+            : Accent;
+
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = SurfaceSoft,
+            Padding = new Padding(10, 6, 10, 6),
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 5, 0, 5)
+        };
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = SurfaceSoft,
+            ColumnCount = 2
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.Controls.Add(new Label
+        {
+            Text = title,
+            Dock = DockStyle.Fill,
+            ForeColor = activeColor,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold)
+        }, 0, 0);
+        header.Controls.Add(new Label
+        {
+            Text = subtitle,
+            Dock = DockStyle.Fill,
+            ForeColor = TextMuted,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 8.5f)
+        }, 1, 0);
+        panel.Controls.Add(header, 0, 0);
+
+        var buttons = new List<Button>();
+        var slots = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = SurfaceSoft,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(0, 2, 0, 0)
+        };
+
+        void PaintButtons(int selected)
+        {
+            for (var i = 0; i < buttons.Count; i++)
+            {
+                var active = i == selected;
+                buttons[i].BackColor = active ? activeColor : SurfaceAlt;
+                buttons[i].ForeColor = active ? Color.Black : TextMain;
+                buttons[i].FlatAppearance.BorderColor = active ? activeColor : Border;
+            }
+        }
+
+        for (var i = 0; i < 9; i++)
+        {
+            var slot = i;
+            var button = new Button
+            {
+                Text = (i + 1).ToString(),
+                Width = 30,
+                Height = 30,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                Margin = new Padding(0, 0, 5, 0)
+            };
+            button.Click += (_, _) =>
+            {
+                PaintButtons(slot);
+                onChanged(slot);
+            };
+            buttons.Add(button);
+            slots.Controls.Add(button);
+        }
+
+        PaintButtons(Math.Clamp(selectedSlot, 0, 8));
+        panel.Controls.Add(slots, 0, 1);
+        return panel;
+    }
+
+    private static Control SlotWhitelistPanel(bool[] selectedSlots, Action<int> onToggle)
+    {
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = SurfaceSoft,
+            Padding = new Padding(10, 6, 10, 6),
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        panel.Controls.Add(new Label
+        {
+            Text = "Whitelisted slots",
+            Dock = DockStyle.Fill,
+            ForeColor = TextMuted,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI Semibold", 9.25f, FontStyle.Bold)
+        }, 0, 0);
+
+        var buttons = new List<Button>();
+        var slots = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = SurfaceSoft,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(0, 2, 0, 0)
+        };
+
+        void PaintButton(int index)
+        {
+            var active = selectedSlots[index];
+            buttons[index].BackColor = active ? Accent : SurfaceAlt;
+            buttons[index].ForeColor = active ? Color.Black : TextMain;
+            buttons[index].FlatAppearance.BorderColor = active ? Accent : Border;
+        }
+
+        for (var i = 0; i < 9; i++)
+        {
+            var index = i;
+            var button = new Button
+            {
+                Text = (i + 1).ToString(),
+                Width = 34,
+                Height = 30,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                Margin = new Padding(0, 0, 5, 0)
+            };
+            button.Click += (_, _) =>
+            {
+                onToggle(index);
+                PaintButton(index);
+            };
+            buttons.Add(button);
+            slots.Controls.Add(button);
+        }
+
+        for (var i = 0; i < buttons.Count; i++)
+        {
+            PaintButton(i);
+        }
+
+        panel.Controls.Add(slots, 0, 1);
+        return panel;
+    }
+
+    private static Control SingleSlotRow(string label, int selectedSlot, Action<int> onChanged)
+    {
+        var row = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            ColumnCount = 2,
+            Margin = new Padding(0, 2, 0, 2)
+        };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row.Controls.Add(FieldLabel(label), 0, 0);
+
+        var buttons = new List<Button>();
+        var slots = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Surface,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(0)
+        };
+
+        void PaintButtons(int selected)
+        {
+            for (var i = 0; i < buttons.Count; i++)
+            {
+                var active = i == selected;
+                buttons[i].BackColor = active ? Accent : SurfaceAlt;
+                buttons[i].ForeColor = active ? Color.Black : TextMain;
+                buttons[i].FlatAppearance.BorderColor = active ? Accent : Border;
+            }
+        }
+
+        for (var i = 0; i < 9; i++)
+        {
+            var slot = i;
+            var button = new Button
+            {
+                Text = (i + 1).ToString(),
+                Width = 34,
+                Height = 30,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                Margin = new Padding(0, 0, 6, 0)
+            };
+            button.Click += (_, _) =>
+            {
+                PaintButtons(slot);
+                onChanged(slot);
+            };
+            buttons.Add(button);
+            slots.Controls.Add(button);
+        }
+
+        PaintButtons(Math.Clamp(selectedSlot, 0, 8));
+        row.Controls.Add(slots, 1, 0);
+        return row;
+    }
+
+    private static string KeyName(Keys key) => key == Keys.None ? "None" : key.ToString();
+
+    private static string KeyHint(Keys key) => key == Keys.None ? "No key set" : $"{key} toggle";
 
     private static Button PrimaryButton(string text)
     {
@@ -1589,14 +2269,14 @@ public sealed class MainForm : Form
         var button = new Button
         {
             Text = slot.ToString(),
-            Width = 42,
-            Height = 36,
+            Width = 36,
+            Height = 32,
             BackColor = selected ? Accent : SurfaceAlt,
             ForeColor = selected ? Color.Black : TextMain,
             FlatStyle = FlatStyle.Flat,
-            Font = new Font("Segoe UI Semibold", 10f, FontStyle.Bold),
+            Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
             Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 8, 8)
+            Margin = new Padding(0, 0, 5, 7)
         };
         button.FlatAppearance.BorderColor = selected ? Accent : Border;
         button.Click += (_, _) =>
